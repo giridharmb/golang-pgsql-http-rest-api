@@ -1,6 +1,6 @@
 #### HTTP REST API & Query PGSQL Backend
 
-<b>This problem connects to PGSQL database and makes a query <br/>
+<b>This program connects to PGSQL database and makes a query <br/>
 against a table and fetches all the rows. This is exposed via <br/>
 HTTP REST API (GET) call to fetch all the rows as a JSON</b>
 
