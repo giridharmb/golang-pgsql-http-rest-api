@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/jackc/pgx/v4"
 	"io/ioutil"
 	"log"
 	"math/rand"
@@ -16,6 +18,20 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 	"github.com/tidwall/gjson"
+)
+
+/*
+Please Refer To This For Populating The Table With Rows:
+
+https://github.com/giridharmb/PostgreSQL-README
+
+*/
+
+var (
+	PGSQLHost string = "my-pgsql-host.company.com"
+	PGSQLUser string = "testuser"
+	PGSQLPass string = "testpassword"
+	PGSQLDB   string = "test-db"
 )
 
 func main() {
@@ -80,6 +96,11 @@ func main() {
 		router.HandleFunc("/api/v1/processData", HandlerProcessData).Methods("POST")
 		/*
 		   curl -H "accept:application/json" -H "content-type:application/json" -d '{"length1": 15, "length2": 25}' -X POST http://localhost:9000/api/v1/processData 2>/dev/null | python -m json.tool
+		*/
+
+		router.HandleFunc("/api/v1/getDataFromPGSQL", HandlerGetDataFromPGSQLTable).Methods("GET")
+		/*
+		   curl -H "accept:application/json" -H "content-type:application/json" -X GET http://localhost:9000/api/v1/getDataFromPGSQL 2>/dev/null | python -m json.tool
 		*/
 
 		log.Fatal(srv.ListenAndServe())
@@ -237,6 +258,129 @@ func GenerateRandomString(lengthOfString int64) string {
 	}
 	return string(b)
 }
+
+/* ******************************* PGSQL Functions | start ********************************************** */
+
+/*
+
+Query table 't_random' - to see the column names
+
+test-db=> select * from t_random limit 10;
+ random_num |    random_float     |               md5
+------------+---------------------+----------------------------------
+        642 | 0.04866303424917717 | 4148034f7ff59deddce0507cf5df6136
+        299 | 0.42088215715087784 | 50cf40c1cd51fa0c9bcda04d19118637
+        452 |  0.5040329323515316 | d83b110f8c24dc876feb39e1d32fc9a9
+        558 |   0.680895277194864 | bd5e6593d1133df5abbe2dcd7ed41b22
+        436 |  0.9993317095718943 | b0e288ee1d4d5ea7c50995091222526c
+        143 |  0.4972750511722168 | 1ecf469484a66c646f33f1ad26d2c120
+        987 |  0.7588865512592768 | 04705f29ec44fede34940cd954acf20c
+        337 |  0.9723930089149349 | fe0f5b228256a75beccfe7156af05616
+        321 |   0.637456665167111 | 5522e09f9a97abd695bf821ce1eca750
+        896 |  0.9731822082784944 | 34726f12c5bae77be4b3bb0293ccb38a
+(10 rows)
+*/
+
+/*
+DBRecord ...
+*/
+type DBRecord struct {
+	RandomNumber int64   `json:"random_num"`   // table column name -> "random_num"
+	RandomFloat  float64 `json:"random_float"` // table column name -> "random_float"
+	MD5Hash      string  `json:"md5"`          // table column name -> "md5"
+}
+
+func GetDataFromPGSQLTable() ([]DBRecord, error) {
+	defer elapsed("__FUNC__: GetDataFromPGSQLTable")()
+	errorMessage := ""
+	outputData := make([]DBRecord, 0)
+	postgresConn := fmt.Sprintf("postgres://%v:%v@%v:5432/%v", PGSQLUser, PGSQLPass, PGSQLHost, PGSQLDB)
+	db, err := pgx.Connect(context.Background(), postgresConn)
+	if err != nil {
+		errorMessage = fmt.Sprintf("unable to connect to database: %v", err.Error())
+		log.Printf(errorMessage)
+		return outputData, errors.New(errorMessage)
+	}
+	defer func() {
+		_ = db.Close(context.Background())
+	}()
+
+	///////// READ MULTIPLE ROWS ////////////
+
+	log.Printf("QUERYING ALL ROWS...")
+
+	rows, err := db.Query(context.Background(), "select "+
+		" random_num,"+
+		" random_float,"+
+		" md5"+
+		" from t_random")
+	if err != nil {
+		errorMessage = fmt.Sprintf("could not perform a select from the table : %v", err.Error())
+		log.Printf(errorMessage)
+		return outputData, errors.New(errorMessage)
+	}
+	defer func() {
+		rows.Close()
+	}()
+
+	counter := 0
+
+	for rows.Next() {
+		var rowData DBRecord
+		err = rows.Scan(
+			&rowData.RandomNumber,
+			&rowData.RandomFloat,
+			&rowData.MD5Hash,
+		)
+		if err != nil {
+			errorMessage = fmt.Sprintf("got an error during row scan : %v", err.Error())
+			log.Printf(errorMessage)
+			return outputData, errors.New(errorMessage)
+		}
+
+		/* *********** pretty print the output **************** */
+		vmDataByteArray, _ := json.MarshalIndent(rowData, "", "    ")
+		fmt.Println(string(vmDataByteArray))
+
+		outputData = append(outputData, rowData)
+
+		counter++
+	}
+
+	// get any error encountered during iteration
+	err = rows.Err()
+	if err != nil {
+		errorMessage = fmt.Sprintf("got an error during row iteration : %v", err.Error())
+		log.Printf(errorMessage)
+		return outputData, errors.New(errorMessage)
+	}
+
+	log.Printf("after scanning all the rows, counter => %v", counter)
+
+	return outputData, nil
+}
+
+/*
+HandlerGetDataFromPGSQLTable ...
+*/
+func HandlerGetDataFromPGSQLTable(w http.ResponseWriter, r *http.Request) {
+	//defer elapsed("__FUNC__: HandlerGetDataFromPGSQLTable")()
+	returnResult := make(map[string]interface{})
+	returnResult["error"] = ""
+	returnResult["serverResponse"] = make([]interface{}, 0)
+	data, err := GetDataFromPGSQLTable()
+	if err != nil {
+		returnResult["error"] = err.Error()
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(&returnResult)
+		return
+	}
+	returnResult["serverResponse"] = data
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(&returnResult)
+}
+
+/* ******************************* PGSQL Functions | end ********************************************** */
 
 const RandomString = `
 {
