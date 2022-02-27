@@ -23,7 +23,7 @@ import (
 /*
 Please Refer To This For Populating The Table With Rows:
 
-https://github.com/giridharmb/PostgreSQL-README
+https://github.com/giridharmb/PostgreSQL-README#generate-a-random-table
 
 */
 
