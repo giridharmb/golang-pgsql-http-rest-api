@@ -1,7 +1,14 @@
 #### HTTP REST API & Query PGSQL Backend
 
+<b>This problem connects to PGSQL database and makes a query <br/>
+against a table and fetches all the rows. This is exposed via <br/>
+HTTP REST API (GET) call to fetch all the rows as a JSON</b>
+
 Please refer to [HTTP Server And REST API](#https://github.com/giridharmb/golang-http-server-rest-api) <br/>
-For Setting Up HTTP Server/REST API.
+For setting up HTTP Server/REST API.
+
+Please refer to [This Document To Generate Sample PostgreSQL Table](https://github.com/giridharmb/PostgreSQL-README#generate-a-random-table) <br/>
+Before running the below code.
 
 #### Fetch The Dependencies
 
