@@ -185,6 +185,7 @@ func HandlerProcessData(w http.ResponseWriter, r *http.Request) {
 		returnResult["error"] = errorMessage
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(&returnResult)
+		return
 	}
 
 	bodyStr := string(body)
